@@ -5,7 +5,8 @@
 # History:
 # When      | Who           | What
 # 04/10/2024|TQ Ye          | Creation
-# 06/10/2024|TQ Ye          | Allow setting the output background colour
+# 06/10/2024|TQ Ye          | Allow selecting differnt model and
+#           |               | setting the output background colour
 ############################################################################
 import sys
 import streamlit as st
@@ -167,7 +168,7 @@ def main(argv):
         col1, col2 = st.columns(2)
         bgcolour_enable = col1.checkbox(label=st.session_state.locale.choose_color_prompt, on_change=enable_bgcolour)
         if bgcolour_enable:
-            st.session_state.bg_color_hex = col2.color_picker(label="", disabled=st.session_state.disabled, value="#002200")
+            st.session_state.bg_color_hex = col2.color_picker(label="colour", disabled=st.session_state.disabled, value="#002200")
             # Convert color hex string to (R, G, B)
             bg_color_rgb = tuple(int(st.session_state.bg_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
             st.session_state.bg_color = bg_color_rgb + (255,)  # Add alpha channel for RGBA
