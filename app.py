@@ -27,6 +27,7 @@ class Local:
     choose_model_prompt: str
     choose_color_prompt: str
     file_upload_label: str
+    file_download_label: str
     support_message: str
     
     def __init__(self, 
@@ -37,6 +38,7 @@ class Local:
                 choose_model_prompt,
                 choose_color_prompt,
                 file_upload_label,
+                file_download_label,
                 support_message,
                 ):
         self.title= title
@@ -46,6 +48,7 @@ class Local:
         self.choose_model_prompt=choose_model_prompt
         self.choose_color_prompt=choose_color_prompt
         self.file_upload_label = file_upload_label
+        self.file_download_label=file_download_label
         self.support_message = support_message
 
 
@@ -57,6 +60,7 @@ en = Local(
     choose_model_prompt="Choose which model to use",
     choose_color_prompt="Choose background colour",
     file_upload_label="Please uploaded your image file (your file will never be saved anywhere)",
+    file_download_label="Download",
     support_message="Please report any issues or suggestions to tqye@yahoo.com",
 )
 
@@ -68,6 +72,7 @@ zw = Local(
     choose_model_prompt="选择模型",
     choose_color_prompt="选择输出背景色。空缺为无色",
     file_upload_label="请上传你的图片文件（图片文件只在内存，不会被保留）",
+    file_download_label="下载链接",
     support_message="如遇什么问题或有什么建议，反馈，请电 tqye@yahoo.com",
 )
 
@@ -120,10 +125,6 @@ def get_geolocation(ip_address):
         print(f"An error: {ex}")
         return None
     
-def model_changed():
-
-    st.session_state.rembg_session = new_session(st.session_state.model_name)
-
 def enable_bgcolour():
 
     st.session_state.disabled = not st.session_state.disabled
@@ -135,8 +136,8 @@ def get_binary_file_downloader_html(bin_file : bytes, file_label='File'):
     out: href string
     '''
     b64 = base64.b64encode(bin_file).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{file_label}">Download {file_label}</a>'
-    
+    href = f'{st.session_state.locale.file_download_label} <a href="data:application/octet-stream;base64,{b64}" download="{file_label}">{file_label}</a>'
+
     return href
 
 @st.cache_resource()
@@ -162,8 +163,9 @@ def main(argv):
     st.session_state.output_placeholder = st.empty()
 
     with st.session_state.model_select_placeholder:
-        st.session_state.model_name = st.selectbox(label=st.session_state.locale.choose_model_prompt, options=("u2net", "isnet-general-use",), on_change=model_changed)
-    
+        st.session_state.model_name = st.selectbox(label=st.session_state.locale.choose_model_prompt, options=("isnet-general-use", "u2net",))
+        st.session_state.rembg_session = new_session(st.session_state.model_name)
+
     with st.session_state.bgcolour_select_placeholder:
         col1, col2 = st.columns(2)
         bgcolour_enable = col1.checkbox(label=st.session_state.locale.choose_color_prompt, on_change=enable_bgcolour)
@@ -223,7 +225,7 @@ if __name__ == "__main__":
         st.session_state.lang_index = 1
         
     if "model_name" not in st.session_state:
-        st.session_state.model_name = "u2net"
+        st.session_state.model_name = "isnet-general-use"
         
     if "rembg_session" not in st.session_state:
         st.session_state.rembg_session = new_session(st.session_state.model_name)
