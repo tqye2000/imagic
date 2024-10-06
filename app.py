@@ -1,15 +1,16 @@
-##############################################################
+###########################################################################
 # Web App for removing background from an image   
 #
 # Author: tqye@yahoo.com
 # History:
 # When      | Who           | What
 # 04/10/2024|TQ Ye          | Creation
-##############################################################
+# 06/10/2024|TQ Ye          | Allow setting the output background colour
+############################################################################
 import sys
 import streamlit as st
 from streamlit_javascript import st_javascript
-from rembg import remove
+from rembg import remove, new_session
 import requests
 from PIL import Image
 import base64
@@ -22,6 +23,8 @@ class Local:
     choose_language: str
     language: str
     lang_code: str
+    choose_model_prompt: str
+    choose_color_prompt: str
     file_upload_label: str
     support_message: str
     
@@ -30,6 +33,8 @@ class Local:
                 choose_language,
                 language,
                 lang_code,
+                choose_model_prompt,
+                choose_color_prompt,
                 file_upload_label,
                 support_message,
                 ):
@@ -37,6 +42,8 @@ class Local:
         self.choose_language = choose_language
         self.language= language
         self.lang_code= lang_code
+        self.choose_model_prompt=choose_model_prompt
+        self.choose_color_prompt=choose_color_prompt
         self.file_upload_label = file_upload_label
         self.support_message = support_message
 
@@ -46,6 +53,8 @@ en = Local(
     choose_language="选择界面语言",
     language="English",
     lang_code="en",
+    choose_model_prompt="Choose which model to use",
+    choose_color_prompt="Choose background colour",
     file_upload_label="Please uploaded your image file (your file will never be saved anywhere)",
     support_message="Please report any issues or suggestions to tqye@yahoo.com",
 )
@@ -55,6 +64,8 @@ zw = Local(
     choose_language="Choose UI Language",
     language="Chinese",
     lang_code="ch",
+    choose_model_prompt="选择模型",
+    choose_color_prompt="选择输出背景色。空缺为无色",
     file_upload_label="请上传你的图片文件（图片文件只在内存，不会被保留）",
     support_message="如遇什么问题或有什么建议，反馈，请电 tqye@yahoo.com",
 )
@@ -108,6 +119,14 @@ def get_geolocation(ip_address):
         print(f"An error: {ex}")
         return None
     
+def model_changed():
+
+    st.session_state.rembg_session = new_session(st.session_state.model_name)
+
+def enable_bgcolour():
+
+    st.session_state.disabled = not st.session_state.disabled
+
 def get_binary_file_downloader_html(bin_file : bytes, file_label='File'):
     '''
     Generates a link allowing the data in a given bin_file to be downloaded
@@ -130,22 +149,37 @@ def Main_Title(text: str) -> None:
 ##############################################
 def main(argv):
     
-    Main_Title(st.session_state.locale.title + " (v0.0.1)")
+    Main_Title(st.session_state.locale.title + " (v0.0.2)")
     st.session_state.user_ip = get_client_ip()
     st.session_state.user_location = get_geolocation(st.session_state.user_ip)
-
+    
+    st.session_state.model_select_placeholder = st.empty()
+    st.session_state.bgcolour_select_placeholder = st.empty()
     st.session_state.uploading_file_placeholder = st.empty()
     st.session_state.images_placeholder = st.empty()
     st.session_state.buttons_placeholder = st.empty()
     st.session_state.output_placeholder = st.empty()
-    sendmail = True
+
+    with st.session_state.model_select_placeholder:
+        st.session_state.model_name = st.selectbox(label=st.session_state.locale.choose_model_prompt, options=("u2net", "isnet-general-use",), on_change=model_changed)
+    
+    with st.session_state.bgcolour_select_placeholder:
+        col1, col2 = st.columns(2)
+        bgcolour_enable = col1.checkbox(label=st.session_state.locale.choose_color_prompt, on_change=enable_bgcolour)
+        if bgcolour_enable:
+            st.session_state.bg_color_hex = col2.color_picker(label="", disabled=st.session_state.disabled, value="#002200")
+            # Convert color hex string to (R, G, B)
+            bg_color_rgb = tuple(int(st.session_state.bg_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            st.session_state.bg_color = bg_color_rgb + (255,)  # Add alpha channel for RGBA
+        else:
+            st.session_state.bg_color = None
 
     st.session_state.uploaded_file = st.session_state.uploading_file_placeholder.file_uploader(label=st.session_state.locale.file_upload_label, type=['png', 'jpg', 'jpeg'], key=st.session_state.fup_key)
     if st.session_state.uploaded_file is not None:
         with st.session_state.images_placeholder:
-            input = Image.open(st.session_state.uploaded_file)
+            input_img = Image.open(st.session_state.uploaded_file)      #input_img: PIL image
             with st.spinner('Wait ...'):
-                new_img = remove(input)
+                new_img = remove(input_img, bgcolor=st.session_state.bg_color, session=st.session_state.rembg_session)                             #new_img: PIL image
             if isinstance(new_img, Image.Image):
                 # display code: 2 column view
                 col1, col2 = st.columns(2)
@@ -187,6 +221,21 @@ if __name__ == "__main__":
     if "lang_index" not in st.session_state:
         st.session_state.lang_index = 1
         
+    if "model_name" not in st.session_state:
+        st.session_state.model_name = "u2net"
+        
+    if "rembg_session" not in st.session_state:
+        st.session_state.rembg_session = new_session(st.session_state.model_name)
+
+    if "bg_color_hex" not in st.session_state:
+        st.session_state.bg_color_hex = "#002200"
+
+    if "bg_color" not in st.session_state:
+        st.session_state.bg_color = None
+
+    if "disabled" not in st.session_state:
+        st.session_state.disabled = True
+
     if "user_ip" not in st.session_state:
         st.session_state.user_ip = get_client_ip()
 
