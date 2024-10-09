@@ -1,9 +1,10 @@
-# removeBG
-Remove the background of an image.
+# Imagic
+A simple tool for enhancing an image or removing the background.
 
 Files:
 1. removeBG.py - A standalone script 
-2. app.py - A streamlit based online tool for remove the background of an image. Please try https://removebj.streamlit.app !
+2. app.py - A streamlit based online tool for processing an image. 
+Please try https://removebj.streamlit.app !
 
 ## Examples:
 <div style="display: flex; justify-content: space-between;">
