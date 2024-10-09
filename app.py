@@ -7,13 +7,14 @@
 # 04/10/2024|TQ Ye          | Creation
 # 06/10/2024|TQ Ye          | Allow selecting differnt model and
 #           |               | setting the output background colour
+# 07/10/2024|TQ Ye          | Add image enhancement option
 ############################################################################
 import sys
 import streamlit as st
 from streamlit_javascript import st_javascript
 from rembg import remove, new_session
 import requests
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 import base64
 import random
 from random import randint
@@ -24,8 +25,11 @@ class Local:
     choose_language: str
     language: str
     lang_code: str
+    choose_proccess_prompt: str
     choose_model_prompt: str
     choose_color_prompt: str
+    image_enhance_label: str
+    image_remove_bg_label: str
     file_upload_label: str
     file_download_label: str
     support_message: str
@@ -35,8 +39,11 @@ class Local:
                 choose_language,
                 language,
                 lang_code,
+                choose_proccess_prompt,
                 choose_model_prompt,
                 choose_color_prompt,
+                image_enhance_label,
+                image_remove_bg_label,
                 file_upload_label,
                 file_download_label,
                 support_message,
@@ -45,32 +52,41 @@ class Local:
         self.choose_language = choose_language
         self.language= language
         self.lang_code= lang_code
+        self.choose_proccess_prompt=choose_proccess_prompt
         self.choose_model_prompt=choose_model_prompt
         self.choose_color_prompt=choose_color_prompt
+        self.image_enhance_label = image_enhance_label
+        self.image_remove_bg_label = image_remove_bg_label
         self.file_upload_label = file_upload_label
         self.file_download_label=file_download_label
         self.support_message = support_message
 
 
 en = Local(
-    title="Remove Background",
+    title="Image Processing",
     choose_language="选择界面语言",
     language="English",
     lang_code="en",
+    choose_proccess_prompt="Choose the process",
     choose_model_prompt="Choose which model to use",
     choose_color_prompt="Choose background colour",
+    image_enhance_label="Image Enhancement",
+    image_remove_bg_label="Remove Background",
     file_upload_label="Please uploaded your image file (your file will never be saved anywhere)",
     file_download_label="Download",
     support_message="Please report any issues or suggestions to tqye@yahoo.com",
 )
 
 zw = Local(
-    title="图片去背景",
+    title="图片处理",
     choose_language="Choose UI Language",
     language="Chinese",
     lang_code="ch",
+    choose_proccess_prompt="选择处理方式",
     choose_model_prompt="选择模型",
     choose_color_prompt="选择输出背景色。空缺为无色",
+    image_enhance_label="图片增强",
+    image_remove_bg_label="去除背景",
     file_upload_label="请上传你的图片文件（图片文件只在内存，不会被保留）",
     file_download_label="下载链接",
     support_message="如遇什么问题或有什么建议，反馈，请电 tqye@yahoo.com",
@@ -126,8 +142,45 @@ def get_geolocation(ip_address):
         return None
     
 def enable_bgcolour():
-
     st.session_state.disabled = not st.session_state.disabled
+
+def image_enhancement(img: Image) -> Image:
+    '''
+    This function is used to enhance the image
+    in:  img (PIL image)
+    out: img (PIL image)
+    '''
+    # Step 1: Color Correction
+    enhancer = ImageEnhance.Brightness(img)
+    img = enhancer.enhance(1.2)  # Increase brightness by 20%
+    
+    enhancer = ImageEnhance.Contrast(img)
+    img = enhancer.enhance(1.3)  # Increase contrast by 30%
+    
+    enhancer = ImageEnhance.Color(img)
+    img = enhancer.enhance(1.1)  # Increase color saturation by 10%
+
+    # Step 2: Noise Reduction
+    img = img.filter(ImageFilter.MedianFilter(size=3))
+
+    # Step 3: Skin Smoothing
+    img = img.filter(ImageFilter.SMOOTH_MORE)
+
+    # Step 4: Eye Enhancement (assuming eyes are a specific region)
+    # This step would require more complex image processing to identify and enhance eyes
+ 
+    # Step 5: Teeth Whitening (assuming teeth are a specific region)
+    # This step would also require more complex image processing to identify and whiten teeth
+ 
+    # Step 6: Background Blur
+    img = img.filter(ImageFilter.GaussianBlur(radius=2))
+
+    # Step 7: Final Touches
+    img = img.filter(ImageFilter.SHARPEN)
+    img = img.filter(ImageFilter.EDGE_ENHANCE)
+    img = img.filter(ImageFilter.EDGE_ENHANCE_MORE)
+    
+    return img
 
 def get_binary_file_downloader_html(bin_file : bytes, file_label='File'):
     '''
@@ -154,7 +207,9 @@ def main(argv):
     Main_Title(st.session_state.locale.title + " (v0.0.2)")
     st.session_state.user_ip = get_client_ip()
     st.session_state.user_location = get_geolocation(st.session_state.user_ip)
-    
+
+    st.session_state.proccess_select_placeholder = st.empty()
+
     st.session_state.model_select_placeholder = st.empty()
     st.session_state.bgcolour_select_placeholder = st.empty()
     st.session_state.uploading_file_placeholder = st.empty()
@@ -162,27 +217,36 @@ def main(argv):
     st.session_state.buttons_placeholder = st.empty()
     st.session_state.output_placeholder = st.empty()
 
-    with st.session_state.model_select_placeholder:
-        st.session_state.model_name = st.selectbox(label=st.session_state.locale.choose_model_prompt, options=("isnet-general-use", "u2net",))
-        st.session_state.rembg_session = new_session(st.session_state.model_name)
-
-    with st.session_state.bgcolour_select_placeholder:
-        col1, col2 = st.columns(2)
-        bgcolour_enable = col1.checkbox(label=st.session_state.locale.choose_color_prompt, on_change=enable_bgcolour)
-        if bgcolour_enable:
-            st.session_state.bg_color_hex = col2.color_picker(label="colour", disabled=st.session_state.disabled, value="#002200")
-            # Convert color hex string to (R, G, B)
-            bg_color_rgb = tuple(int(st.session_state.bg_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-            st.session_state.bg_color = bg_color_rgb + (255,)  # Add alpha channel for RGBA
+    with st.session_state.proccess_select_placeholder:
+        st.session_state.process_name = st.selectbox(label=st.session_state.locale.choose_proccess_prompt, options=(st.session_state.locale.image_enhance_label, st.session_state.locale.image_remove_bg_label,))
+        if st.session_state.process_name == st.session_state.locale.image_remove_bg_label:
+            with st.session_state.model_select_placeholder:
+                st.session_state.model_name = st.selectbox(label=st.session_state.locale.choose_model_prompt, options=("isnet-general-use", "u2net",))
+                st.session_state.rembg_session = new_session(st.session_state.model_name)
+            with st.session_state.bgcolour_select_placeholder:
+                col1, col2 = st.columns(2)
+                bgcolour_enable = col1.checkbox(label=st.session_state.locale.choose_color_prompt, on_change=enable_bgcolour)
+                if bgcolour_enable:
+                    st.session_state.bg_color_hex = col2.color_picker(label="colour", disabled=st.session_state.disabled, value="#002200")
+                    # Convert color hex string to (R, G, B)
+                    bg_color_rgb = tuple(int(st.session_state.bg_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                    st.session_state.bg_color = bg_color_rgb + (255,)  # Add alpha channel for RGBA
+                else:
+                    st.session_state.bg_color = None
         else:
-            st.session_state.bg_color = None
+            pass
 
     st.session_state.uploaded_file = st.session_state.uploading_file_placeholder.file_uploader(label=st.session_state.locale.file_upload_label, type=['png', 'jpg', 'jpeg'], key=st.session_state.fup_key)
     if st.session_state.uploaded_file is not None:
         with st.session_state.images_placeholder:
             input_img = Image.open(st.session_state.uploaded_file)      #input_img: PIL image
             with st.spinner('Wait ...'):
-                new_img = remove(input_img, bgcolor=st.session_state.bg_color, session=st.session_state.rembg_session)                             #new_img: PIL image
+                if st.session_state.process_name == st.session_state.locale.image_enhance_label:
+                    new_img = image_enhancement(input_img)
+                else:
+                    new_img = remove(input_img, bgcolor=st.session_state.bg_color, session=st.session_state.rembg_session)                             #new_img: PIL image
+        
+            # Check if the image was successfully processed
             if isinstance(new_img, Image.Image):
                 # display code: 2 column view
                 col1, col2 = st.columns(2)
@@ -198,16 +262,17 @@ def main(argv):
                     byte_arr = io.BytesIO()
                     new_img.save(byte_arr, format='PNG')
                     final_image_bytes = byte_arr.getvalue()
-                    out_file_name = f"{st.session_state.uploaded_file.name.split('.')[0]}_nb.jpg"
+                    if st.session_state.process_name == st.session_state.locale.image_enhance_label:
+                        out_file_name = f"{st.session_state.uploaded_file.name.split('.')[0]}_enhanced.jpg"
+                    else:
+                        out_file_name = f"{st.session_state.uploaded_file.name.split('.')[0]}_nb.jpg"
                     st.markdown(get_binary_file_downloader_html(final_image_bytes, out_file_name), unsafe_allow_html=True)
-                  
             else:
                 st.image(st.session_state.uploaded_file, width=300)
                 st.warning("Error: Failed to remove background")
 
     else:
         st.session_state.output_placeholder.warning("No file uploaded")
-
 
 ##############################
 # Entry point
