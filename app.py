@@ -8,6 +8,7 @@
 # 06/10/2024|TQ Ye          | Allow selecting differnt model and
 #           |               | setting the output background colour
 # 07/10/2024|TQ Ye          | Add image enhancement option
+# 11/10/2024|TQ Ye          | Allow user to adjust image enhancement parameters
 ############################################################################
 import sys
 import streamlit as st
@@ -30,6 +31,7 @@ class Local:
     choose_color_prompt: str
     image_enhance_label: str
     image_remove_bg_label: str
+    advanced_setting_label: str
     file_upload_label: str
     file_download_label: str
     support_message: str
@@ -44,6 +46,7 @@ class Local:
                 choose_color_prompt,
                 image_enhance_label,
                 image_remove_bg_label,
+                advanced_setting_label,
                 file_upload_label,
                 file_download_label,
                 support_message,
@@ -52,15 +55,16 @@ class Local:
         self.choose_language = choose_language
         self.language= language
         self.lang_code= lang_code
+        self.lang_code= lang_code
         self.choose_proccess_prompt=choose_proccess_prompt
         self.choose_model_prompt=choose_model_prompt
         self.choose_color_prompt=choose_color_prompt
         self.image_enhance_label = image_enhance_label
         self.image_remove_bg_label = image_remove_bg_label
+        self.advanced_setting_label = advanced_setting_label
         self.file_upload_label = file_upload_label
         self.file_download_label=file_download_label
         self.support_message = support_message
-
 
 en = Local(
     title="Image Processing",
@@ -72,13 +76,14 @@ en = Local(
     choose_color_prompt="Choose background colour",
     image_enhance_label="Image Enhancement",
     image_remove_bg_label="Remove Background",
+    advanced_setting_label="Adjust Parameters",
     file_upload_label="Please uploaded your image file (your file will never be saved anywhere)",
     file_download_label="Download",
     support_message="Please report any issues or suggestions to tqye@yahoo.com",
 )
 
 zw = Local(
-    title="图片处理",
+    title="处理图片",
     choose_language="Choose UI Language",
     language="Chinese",
     lang_code="ch",
@@ -87,6 +92,7 @@ zw = Local(
     choose_color_prompt="选择输出背景色。空缺为无色",
     image_enhance_label="图片增强",
     image_remove_bg_label="去除背景",
+    advanced_setting_label="调整参数",
     file_upload_label="请上传你的图片文件（图片文件只在内存，不会被保留）",
     file_download_label="下载链接",
     support_message="如遇什么问题或有什么建议，反馈，请电 tqye@yahoo.com",
@@ -152,13 +158,13 @@ def image_enhancement(img: Image) -> Image:
     '''
     # Step 1: Color Correction
     enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(1.2)  # Increase brightness by 20%
+    img = enhancer.enhance(st.session_state.brightness)  # Increase brightness by 10%
     
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.3)  # Increase contrast by 30%
+    img = enhancer.enhance(st.session_state.contrast)  # Increase contrast by 30%
     
     enhancer = ImageEnhance.Color(img)
-    img = enhancer.enhance(1.1)  # Increase color saturation by 10%
+    img = enhancer.enhance(st.session_state.color)  # Increase color saturation by 10%
 
     # Step 2: Noise Reduction
     img = img.filter(ImageFilter.MedianFilter(size=3))
@@ -173,7 +179,7 @@ def image_enhancement(img: Image) -> Image:
     # This step would also require more complex image processing to identify and whiten teeth
  
     # Step 6: Background Blur
-    img = img.filter(ImageFilter.GaussianBlur(radius=2))
+    img = img.filter(ImageFilter.GaussianBlur(radius=st.session_state.blur))
 
     # Step 7: Final Touches
     img = img.filter(ImageFilter.SHARPEN)
@@ -204,7 +210,7 @@ def Main_Title(text: str) -> None:
 ##############################################
 def main(argv):
     
-    Main_Title(st.session_state.locale.title + " (v0.0.2)")
+    Main_Title(st.session_state.locale.title + " (v0.0.3)")
     st.session_state.user_ip = get_client_ip()
     st.session_state.user_location = get_geolocation(st.session_state.user_ip)
 
@@ -220,6 +226,7 @@ def main(argv):
     with st.session_state.proccess_select_placeholder:
         st.session_state.process_name = st.selectbox(label=st.session_state.locale.choose_proccess_prompt, options=(st.session_state.locale.image_enhance_label, st.session_state.locale.image_remove_bg_label,))
         if st.session_state.process_name == st.session_state.locale.image_remove_bg_label:
+            #remove background
             with st.session_state.model_select_placeholder:
                 st.session_state.model_name = st.selectbox(label=st.session_state.locale.choose_model_prompt, options=("isnet-general-use", "u2net",))
                 st.session_state.rembg_session = new_session(st.session_state.model_name)
@@ -227,14 +234,30 @@ def main(argv):
                 col1, col2 = st.columns(2)
                 bgcolour_enable = col1.checkbox(label=st.session_state.locale.choose_color_prompt, on_change=enable_bgcolour)
                 if bgcolour_enable:
-                    st.session_state.bg_color_hex = col2.color_picker(label="colour", disabled=st.session_state.disabled, value="#002200")
+                    col2.color_picker(label="colour", disabled=st.session_state.disabled, value=st.session_state.bg_color_hex, key="bg_color_hex")
                     # Convert color hex string to (R, G, B)
                     bg_color_rgb = tuple(int(st.session_state.bg_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
                     st.session_state.bg_color = bg_color_rgb + (255,)  # Add alpha channel for RGBA
                 else:
                     st.session_state.bg_color = None
         else:
-            pass
+            #image enhancement
+            with st.session_state.bgcolour_select_placeholder:
+                with st.expander(st.session_state.locale.advanced_setting_label):
+                    en_col1, en_col2 = st.columns(2)
+                    #slider for brightness
+                    #st.session_state.brightness = en_col1.slider("Brightness", 0.5, 2.0, 1.1)
+                    en_col1.slider("Brightness", 0.5, 2.0, key="brightness", value=st.session_state.brightness)
+                    #slider for contrast
+                    en_col1.slider("Contrast", 0.5, 2.0, key="contract", value=st.session_state.contrast)
+                    #slider for sharpness
+                    en_col1.slider("Sharpness", 0.0, 2.0, key="sharpness", value=st.session_state.sharpness, disabled=True)
+                    #slider for color
+                    en_col2.slider("Color", 0.0, 2.0, key="color", value=st.session_state.color)
+                    #slider for blur
+                    st.session_state.blur = en_col2.slider("Background Blur", 1, 4, 2)
+                    #slider for noise
+                    st.session_state.noise = en_col2.slider("Noise Reduction", 1, 4, 3)
 
     st.session_state.uploaded_file = st.session_state.uploading_file_placeholder.file_uploader(label=st.session_state.locale.file_upload_label, type=['png', 'jpg', 'jpeg'], key=st.session_state.fup_key)
     if st.session_state.uploaded_file is not None:
@@ -290,7 +313,7 @@ if __name__ == "__main__":
         st.session_state.lang_index = 1
         
     if "model_name" not in st.session_state:
-        st.session_state.model_name = "isnet-general-use"
+        st.session_state.model_name = "isnet-general-use"  # "u2net" 
         
     if "rembg_session" not in st.session_state:
         st.session_state.rembg_session = new_session(st.session_state.model_name)
@@ -300,6 +323,24 @@ if __name__ == "__main__":
 
     if "bg_color" not in st.session_state:
         st.session_state.bg_color = None
+
+    if "brightness" not in st.session_state:
+        st.session_state.brightness = 1.1   # Increase brightness by 10%
+
+    if "contrast" not in st.session_state:
+        st.session_state.contrast = 1.3   # Increase contrast by 30%
+
+    if "color" not in st.session_state:
+        st.session_state.color = 1.1    # Increase color saturation by 10%
+
+    if "sharpness" not in st.session_state:
+        st.session_state.sharpness = 1.0
+
+    if "blur" not in st.session_state:
+        st.session_state.blur = 2       # kernel size in pixels
+
+    if "noise" not in st.session_state:
+        st.session_state.noise = 3      # Standard deviation of the Gaussian kernel
 
     if "disabled" not in st.session_state:
         st.session_state.disabled = True
