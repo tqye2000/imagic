@@ -3,3 +3,4 @@ streamlit_javascript
 rembg
 requests
 pillow
+onnxruntime
