@@ -3,3 +3,5 @@ streamlit_javascript
 rembg
 requests
 pillow
+mediapipe
+opencv-python
