@@ -9,15 +9,16 @@
 #           |               | setting the output background colour
 # 07/10/2024|TQ Ye          | Add image enhancement option
 # 11/10/2024|TQ Ye          | Allow user to adjust image enhancement parameters
+# 06/12/2024|TQ Ye          | Further improvement for portrait enhancement
 ###############################################################################
 import sys
 import streamlit as st
 from streamlit_javascript import st_javascript
 from rembg import remove, new_session
-import mediapipe as mp
+from PIL import Image, ImageEnhance, ImageFilter
+#import mediapipe as mp
 import cv2
 import requests
-from PIL import Image, ImageEnhance, ImageFilter
 import numpy as np
 import base64
 import random
@@ -35,6 +36,10 @@ class Local:
     image_enhance_label: str
     image_remove_bg_label: str
     advanced_setting_label: str
+    is_portrait_Label: str
+    smooth_skin_Label: str
+    smooth_skin_prompt: str
+    enhance_eyes_Label: str
     file_upload_label: str
     file_download_label: str
     support_message: str
@@ -50,8 +55,10 @@ class Local:
                 image_enhance_label,
                 image_remove_bg_label,
                 advanced_setting_label,
+                is_portrait_Label,
                 smooth_skin_Label,
                 smooth_skin_prompt,
+                enhance_eyes_Label,
                 file_upload_label,
                 file_download_label,
                 support_message,
@@ -67,8 +74,10 @@ class Local:
         self.image_enhance_label = image_enhance_label
         self.image_remove_bg_label = image_remove_bg_label
         self.advanced_setting_label = advanced_setting_label
+        self.is_portrait_Label = is_portrait_Label
         self.smooth_skin_Label = smooth_skin_Label
         self.smooth_skin_prompt = smooth_skin_prompt
+        self.enhance_eyes_Label = enhance_eyes_Label
         self.file_upload_label = file_upload_label
         self.file_download_label=file_download_label
         self.support_message = support_message
@@ -84,8 +93,10 @@ en = Local(
     image_enhance_label="Image Enhancement",
     image_remove_bg_label="Remove Background",
     advanced_setting_label="Adjust Parameters",
+    is_portrait_Label="Is it a Portrait?",
     smooth_skin_Label="Smooth Skin",
     smooth_skin_prompt="Enable for portraits to smooth skin texture",
+    enhance_eyes_Label="Enhance eyes for portraits",
     file_upload_label="Please uploaded your image file (your file will never be saved anywhere)",
     file_download_label="Download",
     support_message="Please report any issues or suggestions to tqye@yahoo.com",
@@ -97,13 +108,15 @@ zw = Local(
     language="Chinese",
     lang_code="ch",
     choose_proccess_prompt="选择处理方式",
-    choose_model_prompt="选择模型 (建议比较不同模型)",
+    choose_model_prompt="选择模型",
     choose_color_prompt="选择输出背景色。空缺为无色",
     image_enhance_label="图片增强",
     image_remove_bg_label="去除背景",
     advanced_setting_label="调整参数",
+    is_portrait_Label="人物肖像",
     smooth_skin_Label="柔化皮肤",
     smooth_skin_prompt="处理人物肖像，请选择这个选项！否则不选。",
+    enhance_eyes_Label="强化眼睛",
     file_upload_label="请上传你的图片文件（图片文件只在内存，不会被保留）",
     file_download_label="下载链接",
     support_message="如遇什么问题或有什么建议，反馈，请电 tqye@yahoo.com",
@@ -161,30 +174,27 @@ def get_geolocation(ip_address):
 def enable_bgcolour():
     st.session_state.disabled = not st.session_state.disabled
 
-def detect_face_mediapipe(img: Image) -> list:
-    '''
-    Fast and accurate face detection using MediaPipe
-    Returns list of face landmarks
-    '''
+    return sender_email, password
 
-    # Initialize MediaPipe Face Detection
-    mp_face_detection = mp.solutions.face_detection
-    mp_drawing = mp.solutions.drawing_utils
-    
-    # Convert PIL to numpy array
-    img_np = np.array(img)
-    
-    with mp_face_detection.FaceDetection(
-        model_selection=1,  # 0 for short-range, 1 for full-range
-        min_detection_confidence=0.5
-    ) as face_detection:
-        # Convert to RGB
-        results = face_detection.process(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
-        
-        if results.detections:
-            return results.detections
-        return []
-    
+def model_changed():
+    st.session_state.rembg_session = new_session(st.session_state.model_name)
+
+def enable_bgcolour():
+    st.session_state.disabled = not st.session_state.disabled
+
+# def is_portrait(image: Image) -> bool:
+#     # Initialize MediaPipe Face Detection
+#     mp_face_detection = mp.solutions.face_detection
+#     face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
+
+#     # Convert PIL Image to OpenCV format (BGR)
+#     image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+#     # Detect faces
+#     results = face_detection.process(image_cv)
+
+#     # Check if any faces were detected
+#     return bool(results.detections)
 
 def enhance_eyes(img: Image) -> Image:
     '''
@@ -214,94 +224,12 @@ def enhance_eyes(img: Image) -> Image:
     # Convert back to PIL Image
     return Image.fromarray(enhanced)
 
-# def enhance_portrait(img: Image) -> Image:
-#     '''
-#     Enhanced portrait processing with face detection
-#     '''
-    
-#     # Initialize MediaPipe
-#     mp_face_mesh = mp.solutions.face_mesh
-    
-#     # Convert to numpy array
-#     img_np = np.array(img)
-#     height, width = img_np.shape[:2]
-    
-#     # Create mask for facial features
-#     feature_mask = np.zeros((height, width), dtype=np.uint8)
-    
-#     with mp_face_mesh.FaceMesh(
-#         static_image_mode=True,
-#         max_num_faces=1,
-#         min_detection_confidence=0.5
-#     ) as face_mesh:
-#         results = face_mesh.process(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
-        
-#         if results.multi_face_landmarks:
-#             for face_landmarks in results.multi_face_landmarks:
-#                 # Get eye landmarks
-#                 left_eye = [(int(l.x * width), int(l.y * height)) 
-#                            for l in face_landmarks.landmark[133:145]]
-#                 right_eye = [(int(l.x * width), int(l.y * height)) 
-#                             for l in face_landmarks.landmark[362:374]]
-                
-#                 # Draw eye regions on mask
-#                 cv2.fillPoly(feature_mask, [np.array(left_eye)], 255)
-#                 cv2.fillPoly(feature_mask, [np.array(right_eye)], 255)
-                
-#                 # Dilate mask slightly to include eye surroundings
-#                 kernel = np.ones((5,5), np.uint8)
-#                 feature_mask = cv2.dilate(feature_mask, kernel, iterations=1)
-    
-#     # Enhance eyes
-#     enhanced = enhance_eyes(img)
-    
-#     # Blend using mask
-#     mask = feature_mask / 255.0
-#     mask = np.stack([mask] * 3, axis=-1)
-#     result = img_np * (1 - mask) + np.array(enhanced) * mask
-    
-#     return Image.fromarray(result.astype(np.uint8))
-
-def is_portrait(image_path):
-    # Initialize MediaPipe Face Detection
-    mp_face_detection = mp.solutions.face_detection
-    face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
-
-    # Read and process image
-    image = cv2.imread(image_path)
-    # Convert BGR to RGB
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    
-    # Detect faces
-    results = face_detection.process(image_rgb)
-    
-    # Check if any faces were detected
-    if results.detections:
-        # If at least one face is detected, consider it a portrait
-        return True
-    return False
-
-def is_portrait(image: Image) -> bool:
-    # Initialize MediaPipe Face Detection
-    mp_face_detection = mp.solutions.face_detection
-    face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
-
-    # Convert PIL Image to OpenCV format (BGR)
-    image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-
-    # Detect faces
-    results = face_detection.process(image_cv)
-
-    # Check if any faces were detected
-    return bool(results.detections)
-
 def image_enhancement(img: Image) -> Image:
     '''
     This function is used to enhance the image
     in:  img (PIL image)
     out: img (PIL image)
     '''
-
     # Convert to RGB if image is in RGBA mode
     if img.mode == 'RGBA':
         img = img.convert('RGB')
@@ -339,9 +267,6 @@ def image_enhancement(img: Image) -> Image:
     # Step 5: Sharpness Enhancement
     enhancer = ImageEnhance.Sharpness(img)
     img = enhancer.enhance(st.session_state.sharpness)  # Increase sharpness by 10%
-
-    # Step 4: Eye Enhancement (assuming eyes are a specific region)
-    # This step would require more complex image processing to identify and enhance eyes
  
     # Step 5: Teeth Whitening (assuming teeth are a specific region)
     # This step would also require more complex image processing to identify and whiten teeth
@@ -375,7 +300,6 @@ def Main_Title(text: str) -> None:
 
     st.markdown(f'<p style="background-color:#ffffff;color:#049ca4;font-weight:bold;font-size:24px;border-radius:2%;">{text}</p>', unsafe_allow_html=True)
 
-
 ##############################################
 ################ MAIN ########################
 ##############################################
@@ -388,6 +312,7 @@ def main(argv):
     st.session_state.proccess_select_placeholder = st.empty()
 
     st.session_state.model_select_placeholder = st.empty()
+    st.session_state.is_portrait_placeholder = st.empty()
     st.session_state.bgcolour_select_placeholder = st.empty()
     st.session_state.uploading_file_placeholder = st.empty()
     st.session_state.images_placeholder = st.empty()
@@ -413,15 +338,16 @@ def main(argv):
                     st.session_state.bg_color = None
         else:
             #image enhancement
+            st.session_state.is_portrait_placeholder.checkbox(st.session_state.locale.is_portrait_Label, key="is_portrait", help=st.session_state.locale.smooth_skin_prompt)
             with st.session_state.bgcolour_select_placeholder:
                 with st.expander(st.session_state.locale.advanced_setting_label):
                     en_col1, en_col2 = st.columns(2)
                     #en_col1.checkbox(st.session_state.locale.smooth_skin_Label, key="smooth_skin", help=st.session_state.locale.smooth_skin_prompt)
                     #en_col2.checkbox("Enhance Eyes", key="enhance_eyes", help="Enhance eye clarity and contrast")
-                    smooth_skin = en_col1.checkbox(st.session_state.locale.smooth_skin_Label, value=st.session_state.smooth_skin, help=st.session_state.locale.smooth_skin_prompt)
-                    enhance_eyes = en_col2.checkbox("Enhance Eyes", value=st.session_state.enhance_eyes, help="Enhance eye clarity and contrast")
-                    st.session_state.smooth_skin = smooth_skin
-                    st.session_state.enhance_eyes = enhance_eyes
+                    #st.session_state.smooth_skin = en_col1.checkbox(st.session_state.locale.smooth_skin_Label, value=st.session_state.smooth_skin, help=st.session_state.locale.smooth_skin_prompt)
+                    #st.session_state.enhance_eyes = en_col1.checkbox(st.session_state.locale.enhance_eyes_Label, value=st.session_state.enhance_eyes, help="Enhance eye clarity and contrast")
+                    #en_col2.slider("Eye Enhancement Strength", 0.0, 1.0, key="eye_strength", value=0.2, disabled=st.session_state.enhance_eyes)   #slider for blur
+
                     #slider for color
                     en_col1.slider("Color", 0.0, 2.0, key="color", value=st.session_state.color)
                     #slider for brightness
@@ -430,8 +356,6 @@ def main(argv):
                     en_col1.slider("Contrast", 0.5, 2.0, key="contract", value=st.session_state.contrast)
                     #slider for sharpness
                     en_col2.slider("Sharpness", 0.0, 2.0, key="sharpness", value=st.session_state.sharpness)
-                    #if st.session_state.enhance_eyes:
-                    #    en_col2.slider("Eye Enhancement Strength", 0.0, 1.0, key="eye_strength", value=0.2)   #slider for blur
                     #st.session_state.blur = en_col2.slider("Background Blur", 1, 4, 2)
                     #slider for noise
                     #st.session_state.noise = en_col2.slider("Noise Reduction", 1, 4, 3)
@@ -442,10 +366,8 @@ def main(argv):
             input_img = Image.open(st.session_state.uploaded_file)      #input_img: PIL image
             with st.spinner('Wait ...'):
                 if st.session_state.process_name == st.session_state.locale.image_enhance_label:
-                    if is_portrait(input_img):
-                        print("It's a portrait!")
-                        st.session_state.smooth_skin = True
-                        st.session_state.enhance_eyes = True
+                    st.session_state.smooth_skin = st.session_state.is_portrait
+                    st.session_state.enhance_eyes = st.session_state.is_portrait
                     new_img = image_enhancement(input_img)
                 else:
                     new_img = remove(input_img, bgcolor=st.session_state.bg_color, session=st.session_state.rembg_session)                             #new_img: PIL image
@@ -516,6 +438,9 @@ if __name__ == "__main__":
 
     if "sharpness" not in st.session_state:
         st.session_state.sharpness = 1.2
+
+    if "is_portrait" not in st.session_state:
+        st.session_state.is_portrait = True
 
     if "smooth_skin" not in st.session_state:
         st.session_state.smooth_skin = True
